@@ -2,6 +2,8 @@ package com.cold_email.cold_email.service;
 
 // Importing required classes
 import com.cold_email.cold_email.entity.EmailDetails;
+import com.cold_email.cold_email.dto.BulkEmailRequest;
+import com.cold_email.cold_email.dto.MailConfig;
 
 // Interface
 public interface EmailService {
@@ -15,4 +17,10 @@ public interface EmailService {
     String sendMailWithAttachment(EmailDetails details);
 
     String sendBulkMailWithAttachment(EmailDetails details);
+
+    String sendBulk(BulkEmailRequest request);
+
+    void updateConfig(MailConfig config);
+
+    MailConfig getConfig();
 }

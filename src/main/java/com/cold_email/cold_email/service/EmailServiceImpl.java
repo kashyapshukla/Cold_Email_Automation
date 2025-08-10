@@ -6,6 +6,8 @@ package com.cold_email.cold_email.service;
 
 // Importing required classes
 import com.cold_email.cold_email.entity.EmailDetails;
+import com.cold_email.cold_email.dto.BulkEmailRequest;
+import com.cold_email.cold_email.dto.MailConfig;
 import java.io.File;
 import java.io.IOException;
 import java.util.Objects;
@@ -21,6 +23,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
+import org.springframework.mail.javamail.JavaMailSenderImpl;
 import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
 
@@ -32,6 +35,7 @@ public class EmailServiceImpl implements EmailService {
 
     @Autowired private JavaMailSender javaMailSender;
 
+    private final MailConfig currentConfig = new MailConfig("smtp.gmail.com", 587, "", "", true, true, "");
 
     String send="";
     String email="<!DOCTYPE html>\n" +
@@ -96,33 +100,36 @@ public class EmailServiceImpl implements EmailService {
             "</body>\n" +
             "</html>\n";
 
+    private JavaMailSender buildSenderFromConfig() {
+        JavaMailSenderImpl sender = new JavaMailSenderImpl();
+        sender.setHost(currentConfig.getHost());
+        if (currentConfig.getPort() != null) sender.setPort(currentConfig.getPort());
+        sender.setUsername(currentConfig.getUsername());
+        sender.setPassword(currentConfig.getPassword());
+        Properties props = sender.getJavaMailProperties();
+        props.put("mail.smtp.auth", String.valueOf(currentConfig.isAuth()));
+        props.put("mail.smtp.starttls.enable", String.valueOf(currentConfig.isStarttls()));
+        return sender;
+    }
+
     // Method 1
     // To send a simple email
     public String sendSimpleMail(EmailDetails details)
     {
 
-        // Try block to check for exceptions
         try {
-
-            // Creating a simple mail message
-
             MimeMessage mimeMessage = javaMailSender.createMimeMessage();
             MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, true);
 
-            // Setting up necessary details
-            helper.setFrom(send);
+            helper.setFrom(currentConfig.getFrom() != null && !currentConfig.getFrom().isEmpty() ? currentConfig.getFrom() : Optional.ofNullable(currentConfig.getUsername()).orElse(""));
             helper.setTo(details.getRecipient());
-            helper.setText(email, true);
+            helper.setText(details.getMsgBody() != null && !details.getMsgBody().isEmpty() ? details.getMsgBody() : email, true);
             helper.setSubject(details.getSubject());
 
-            // Sending the mail
             javaMailSender.send(mimeMessage);
             return "Mail Sent Successfully...";
-        }
-
-        // Catch block to handle the exceptions
-        catch (Exception e) {
-            return "Error while Sending Mail";
+        } catch (Exception e) {
+            return "Error while Sending Mail: " + e.getMessage();
         }
     }
 
@@ -131,43 +138,25 @@ public class EmailServiceImpl implements EmailService {
     public String
     sendMailWithAttachment(EmailDetails details)
     {
-        // Creating a mime message
-        MimeMessage mimeMessage
-                = javaMailSender.createMimeMessage();
-        MimeMessageHelper mimeMessageHelper;
+        MimeMessage mimeMessage = javaMailSender.createMimeMessage();
 
         try {
-
-            // Setting multipart as true for attachments to
-            // be send
-
             MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, true);
 
-            // Setting up necessary details
-            helper.setFrom(send);
+            helper.setFrom(currentConfig.getFrom() != null && !currentConfig.getFrom().isEmpty() ? currentConfig.getFrom() : Optional.ofNullable(currentConfig.getUsername()).orElse(""));
             helper.setTo(details.getRecipient());
-            helper.setText(email, true);
+            helper.setText(details.getMsgBody() != null && !details.getMsgBody().isEmpty() ? details.getMsgBody() : email, true);
             helper.setSubject(details.getSubject());
 
+            if (details.getAttachment() != null && !details.getAttachment().isEmpty()) {
+                FileSystemResource file = new FileSystemResource(new File(details.getAttachment()));
+                helper.addAttachment(Objects.requireNonNull(file.getFilename()), file);
+            }
 
-            // Adding the attachment
-            FileSystemResource file
-                    = new FileSystemResource(
-                    new File(details.getAttachment()));
-
-            helper.addAttachment(
-                    Objects.requireNonNull(file.getFilename()), file);
-
-            // Sending the mail
             javaMailSender.send(mimeMessage);
             return "Mail sent Successfully";
-        }
-
-        // Catch block to handle MessagingException
-        catch (MessagingException e) {
-
-            // Display message when exception occurred
-            return "Error while sending mail!!!";
+        } catch (MessagingException e) {
+            return "Error while sending mail: " + e.getMessage();
         }
     }
 
@@ -182,7 +171,7 @@ public class EmailServiceImpl implements EmailService {
 
         }
 
-        return "";
+        return "Bulk mail sent";
     }
 
     public List<String> sendBulkEmail(EmailDetails details){
@@ -190,7 +179,6 @@ public class EmailServiceImpl implements EmailService {
         String csvFilePath = details.getCsv();
         List<String> emailList = extractEmailAddresses(csvFilePath);
 
-        // Print the extracted email IDs
         emailList.forEach(System.out::println);
 
         return  emailList;
@@ -244,6 +232,51 @@ public class EmailServiceImpl implements EmailService {
     private static boolean isValidEmail(String email) {
         String emailRegex = "^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+$"; // Regex to match email addresses
         return email.matches(emailRegex);
+    }
+
+    @Override
+    public String sendBulk(BulkEmailRequest request) {
+        int sent = 0;
+        for (String to : Optional.ofNullable(request.getRecipients()).orElse(Collections.emptyList())) {
+            try {
+                MimeMessage mimeMessage = javaMailSender.createMimeMessage();
+                MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, true);
+                helper.setFrom(currentConfig.getFrom() != null && !currentConfig.getFrom().isEmpty() ? currentConfig.getFrom() : Optional.ofNullable(currentConfig.getUsername()).orElse(""));
+                helper.setTo(to);
+                helper.setSubject(request.getSubject());
+                helper.setText(request.getBody() != null && !request.getBody().isEmpty() ? request.getBody() : email, true);
+                javaMailSender.send(mimeMessage);
+                sent++;
+            } catch (Exception ignored) {}
+        }
+        return "Sent " + sent + " emails";
+    }
+
+    @Override
+    public void updateConfig(MailConfig config) {
+        if (config.getHost() != null) currentConfig.setHost(config.getHost());
+        if (config.getPort() != null) currentConfig.setPort(config.getPort());
+        if (config.getUsername() != null) currentConfig.setUsername(config.getUsername());
+        if (config.getPassword() != null) currentConfig.setPassword(config.getPassword());
+        currentConfig.setAuth(config.isAuth());
+        currentConfig.setStarttls(config.isStarttls());
+        if (config.getFrom() != null) currentConfig.setFrom(config.getFrom());
+
+        // If the bean JavaMailSender is not configured with credentials, we can dynamically update it
+        if (javaMailSender instanceof JavaMailSenderImpl impl) {
+            impl.setHost(currentConfig.getHost());
+            if (currentConfig.getPort() != null) impl.setPort(currentConfig.getPort());
+            impl.setUsername(currentConfig.getUsername());
+            impl.setPassword(currentConfig.getPassword());
+            Properties props = impl.getJavaMailProperties();
+            props.put("mail.smtp.auth", String.valueOf(currentConfig.isAuth()));
+            props.put("mail.smtp.starttls.enable", String.valueOf(currentConfig.isStarttls()));
+        }
+    }
+
+    @Override
+    public MailConfig getConfig() {
+        return currentConfig;
     }
 }
 
