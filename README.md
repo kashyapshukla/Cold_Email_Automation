@@ -1,16 +1,12 @@
-## API Endpoint
+# Cold Email Backend
 
-### 1. **Send Bulk Mail with Attachment**
-- **URL:** `http://localhost:8080/sendBulkMailWithAttachment`
-- **Method:** `POST`
-- **Content-Type:** `application/json`
+Run:
 
-#### Request Body:
-```json
-{
-  "recipient": "xyx2@gmail.com",
-  "msgBody": "hello",
-  "subject": "hello",
-  "attachment": "sdaakjshdkjhd.pdf",
-  "csv": "sadksdsn2.csv"
-}
+- Build: `./mvnw -q -DskipTests package`
+- Start: `./mvnw spring-boot:run`
+- UI: open `http://localhost:8080/` for configuration and bulk send
+
+APIs (base `/api`):
+- POST `/sendBulk` { recipients: string[], subject: string, body: string }
+- POST `/config` SMTP config
+- GET `/config` current config (no password)

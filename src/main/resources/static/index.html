@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Email Sender</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    .card { border: 1px solid #ddd; padding: 16px; border-radius: 8px; margin-bottom: 16px; max-width: 800px; }
+    label { display: block; margin: 8px 0 4px; }
+    input, textarea { width: 100%; padding: 8px; }
+    button { padding: 8px 12px; margin-top: 12px; }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .success { color: green; }
+    .error { color: red; }
+  </style>
+</head>
+<body>
+  <h2>SMTP Configuration</h2>
+  <div class="card">
+    <div class="row">
+      <div>
+        <label>Host</label>
+        <input id="host" placeholder="smtp.gmail.com" />
+      </div>
+      <div>
+        <label>Port</label>
+        <input id="port" type="number" placeholder="587" />
+      </div>
+      <div>
+        <label>Username</label>
+        <input id="username" placeholder="your@gmail.com" />
+      </div>
+      <div>
+        <label>Password</label>
+        <input id="password" type="password" />
+      </div>
+      <div>
+        <label>From (optional)</label>
+        <input id="from" placeholder="Your Name <your@gmail.com>" />
+      </div>
+      <div>
+        <label>Auth</label>
+        <input id="auth" type="checkbox" checked />
+      </div>
+      <div>
+        <label>STARTTLS</label>
+        <input id="starttls" type="checkbox" checked />
+      </div>
+    </div>
+    <button onclick="saveConfig()">Save Config</button>
+    <div id="configStatus"></div>
+  </div>
+
+  <h2>Send Bulk Email</h2>
+  <div class="card">
+    <label>Recipients (one per line)</label>
+    <textarea id="recipients" rows="6" placeholder="user1@example.com
+user2@example.com"></textarea>
+
+    <label>Subject</label>
+    <input id="subject" placeholder="Subject" />
+
+    <label>Body (HTML allowed)</label>
+    <textarea id="body" rows="10" placeholder="Write your email body..."></textarea>
+
+    <button onclick="sendBulk()">Send</button>
+    <div id="sendStatus"></div>
+  </div>
+
+  <script>
+    const apiBase = '/api';
+
+    async function loadConfig() {
+      try {
+        const res = await fetch(`${apiBase}/config`);
+        if (!res.ok) return;
+        const cfg = await res.json();
+        document.getElementById('host').value = cfg.host || '';
+        document.getElementById('port').value = cfg.port || 587;
+        document.getElementById('username').value = cfg.username || '';
+        document.getElementById('from').value = cfg.from || '';
+        document.getElementById('auth').checked = cfg.auth !== false;
+        document.getElementById('starttls').checked = cfg.starttls !== false;
+      } catch (e) {}
+    }
+
+    async function saveConfig() {
+      const payload = {
+        host: document.getElementById('host').value,
+        port: parseInt(document.getElementById('port').value, 10) || 587,
+        username: document.getElementById('username').value,
+        password: document.getElementById('password').value,
+        from: document.getElementById('from').value,
+        auth: document.getElementById('auth').checked,
+        starttls: document.getElementById('starttls').checked
+      };
+      const res = await fetch(`${apiBase}/config`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      document.getElementById('configStatus').textContent = res.ok ? 'Saved.' : 'Failed.';
+      document.getElementById('configStatus').className = res.ok ? 'success' : 'error';
+    }
+
+    async function sendBulk() {
+      const recipients = document.getElementById('recipients').value
+        .split(/\n|,|;|\s+/)
+        .map(s => s.trim())
+        .filter(Boolean);
+      const payload = {
+        recipients,
+        subject: document.getElementById('subject').value,
+        body: document.getElementById('body').value
+      };
+      const res = await fetch(`${apiBase}/sendBulk`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      const text = await res.text();
+      document.getElementById('sendStatus').textContent = res.ok ? text : `Failed: ${text}`;
+      document.getElementById('sendStatus').className = res.ok ? 'success' : 'error';
+    }
+
+    loadConfig();
+  </script>
+</body>
+</html>
